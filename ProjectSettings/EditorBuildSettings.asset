@@ -1,0 +1,42 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1045 &1
+EditorBuildSettings:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Scenes:
+  - enabled: 0
+    path: Assets/Scenes/CampuStroller.unity
+    guid: 0d743f46d77174d3eb1e956c25751ba4
+  - enabled: 0
+    path: Assets/Scenes/CampuStroller _ Depth.unity
+    guid: e19f035dc97e1484ebffbf4c6d5497ec
+  - enabled: 0
+    path: Assets/Scenes/StudioSubmission.unity
+    guid: aa798c6295b3442e6bcd9b02e3891169
+  - enabled: 0
+    path: Assets/Scenes/CampuStroller 2Sprint 2.unity
+    guid: 645f86eeee4394cad904bac069b63626
+  - enabled: 0
+    path: Assets/Samples/ARCore Extensions/1.46.0/Geospatial Sample/Scenes/GeospatialArf4.unity
+    guid: 1ed15e9657253406185e4b2c7c5a4fc4
+  - enabled: 0
+    path: Assets/Scenes/PersistentCloudAnchors.unity
+    guid: a1cbde3cab63248f4bbf8d8ad6586754
+  - enabled: 0
+    path: Assets/Scenes/CloudAnchorswithGeospatial.unity
+    guid: caafb1731da854c62bf917240539e9d1
+  - enabled: 0
+    path: Assets/Samples/ARCore Extensions/1.46.0/Persistent Cloud Anchor Sample/Scenes/PersistentCloudAnchorsArf4
+      1.unity
+    guid: 7679c6ff5b8f04be49f87e2c1f6ed193
+  - enabled: 1
+    path: Assets/Scenes/OpenStudioSubmission.unity
+    guid: 2775243babeb347e099f7c38f633b2a5
+  m_configObjects:
+    UnityEditor.XR.ARCore.ARCoreSettings: {fileID: 11400000, guid: 207f3da1039684020b274f2922e8f158, type: 2}
+    UnityEditor.XR.ARKit.ARKitSettings: {fileID: 11400000, guid: 77ea0187b0e544a47a620b8583ea6b47, type: 2}
+    com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+    com.unity.xr.arfoundation.simulation_settings: {fileID: 11400000, guid: 597b4cb9c108140c1bfe98645a0e1457, type: 2}
+    com.unity.xr.management.loader_settings: {fileID: 11400000, guid: 729fb0feee2d2441d89450d1384242cf, type: 2}
+  m_UseUCBPForAssetBundles: 0
