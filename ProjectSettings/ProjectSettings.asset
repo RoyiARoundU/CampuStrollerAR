@@ -143,6 +143,10 @@ PlayerSettings:
   preloadedAssets:
   - {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   - {fileID: 4800000, guid: c8d12adcee749c344b8117cf7c7eb912, type: 3}
+  - {fileID: -6805887785617502616, guid: 729fb0feee2d2441d89450d1384242cf, type: 2}
+  - {fileID: 4800000, guid: e7c77f6eaab324a819efdc13b8125a39, type: 3}
+  - {fileID: 4800000, guid: 6743a50a812740be8c0aa3fccc46fae9, type: 3}
+  - {fileID: 11400000, guid: 597b4cb9c108140c1bfe98645a0e1457, type: 2}
   - {fileID: 11400000, guid: c9d1a6587e7e84061865510eb2d8229d, type: 2}
   metroInputSource: 0
   wsaTransparentSwapchain: 0

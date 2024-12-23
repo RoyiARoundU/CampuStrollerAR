@@ -358,6 +358,11 @@ namespace Google.XR.ARCoreExtensions.Samples.PersistentCloudAnchors
         /// </summary>
         public void OnDisable()
         {
+            if (_previewObject != null)
+            {
+                Destroy(_previewObject);
+                _previewObject = null;
+            }
             if (_qualityIndicator != null)
             {
                 Destroy(_qualityIndicator.gameObject);
@@ -414,61 +419,159 @@ namespace Google.XR.ARCoreExtensions.Samples.PersistentCloudAnchors
         /// <summary>
         /// The Unity Update() method.
         /// </summary>
-        public void Update()
+       public void Update()
+    {
+        // Give ARCore some time to prepare for hosting or resolving.
+        if (_timeSinceStart < _startPrepareTime)
         {
-            // Give ARCore some time to prepare for hosting or resolving.
-            if (_timeSinceStart < _startPrepareTime)
-            {
-                _timeSinceStart += Time.deltaTime;
-                if (_timeSinceStart >= _startPrepareTime)
-                {
-                    UpdateInitialInstruction();
-                }
-
-                return;
-            }
-
-            ARCoreLifecycleUpdate();
-            if (_isReturning)
-            {
-                return;
-            }
-
+            _timeSinceStart += Time.deltaTime;
             if (_timeSinceStart >= _startPrepareTime)
             {
-                DisplayTrackingHelperMessage();
+                UpdateInitialInstruction();
             }
+            return;
+        }
 
-            if (Controller.Mode == PersistentCloudAnchorsController.ApplicationMode.Resolving)
+        ARCoreLifecycleUpdate();
+        if (_isReturning)
+        {
+            return;
+        }
+
+        if (_timeSinceStart >= _startPrepareTime)
+        {
+            DisplayTrackingHelperMessage();
+        }
+
+        if (Controller.Mode == PersistentCloudAnchorsController.ApplicationMode.Resolving)
+        {
+            ResolvingCloudAnchors();
+        }
+        else if (Controller.Mode == PersistentCloudAnchorsController.ApplicationMode.Hosting)
+        {
+            // Handle touch input for dragging and placement
+            if (Input.touchCount > 0)
             {
-                ResolvingCloudAnchors();
-            }
-            else if (Controller.Mode == PersistentCloudAnchorsController.ApplicationMode.Hosting)
-            {
-                // Perform hit test and place an anchor on the hit test result.
-                if (_anchor == null)
+                Touch touch = Input.GetTouch(0);
+
+                // Ignore the touch if it's pointing on UI objects
+                if (EventSystem.current.IsPointerOverGameObject(touch.fingerId))
                 {
-                    // If the player has not touched the screen then the update is complete.
-                    Touch touch;
-                    if (Input.touchCount < 1 ||
-                        (touch = Input.GetTouch(0)).phase != TouchPhase.Began)
-                    {
-                        return;
-                    }
-
-                    // Ignore the touch if it's pointing on UI objects.
-                    if (EventSystem.current.IsPointerOverGameObject(touch.fingerId))
-                    {
-                        return;
-                    }
-
-                    // Perform hit test and place a pawn object.
-                    PerformHitTest(touch.position);
+                    return;
                 }
 
+                switch (touch.phase)
+                {
+                    case TouchPhase.Began:
+                        // Start dragging if no anchor exists
+                        if (_anchor == null && !_isDragging)
+                        {
+                            _isDragging = true;
+                            // Create preview object
+                            HandleDragStart(touch.position);
+                        }
+                        break;
+
+                    case TouchPhase.Moved:
+                    case TouchPhase.Stationary:
+                        // Update position while dragging
+                        if (_isDragging && _previewObject != null)
+                        {
+                            UpdateDragPosition(touch.position);
+                        }
+                        break;
+
+                    case TouchPhase.Ended:
+                        // Finalize placement when drag ends
+                        if (_isDragging)
+                        {
+                            _isDragging = false;
+                            FinalizePlacement(touch.position);
+                        }
+                        break;
+                }
+            }
+
+            if (_anchor != null)
+            {
                 HostingCloudAnchor();
             }
         }
+    }
+
+    private void HandleDragStart(Vector2 touchPos)
+    {
+        List<ARRaycastHit> hitResults = new List<ARRaycastHit>();
+        if (Controller.RaycastManager.Raycast(touchPos, hitResults, TrackableType.PlaneWithinPolygon))
+        {
+            // Create preview object at hit position
+            var hitPose = hitResults[0].pose;
+            _previewObject = Instantiate(CloudAnchorPrefab, hitPose.position, hitPose.rotation);
+        }
+    }
+
+    private void UpdateDragPosition(Vector2 touchPos)
+    {
+        List<ARRaycastHit> hitResults = new List<ARRaycastHit>();
+        if (Controller.RaycastManager.Raycast(touchPos, hitResults, TrackableType.PlaneWithinPolygon))
+        {
+            var hitPose = hitResults[0].pose;
+            _previewObject.transform.position = hitPose.position;
+            
+            // Update rotation to face camera while maintaining up vector
+            Vector3 cameraPosXZ = new Vector3(
+                Controller.MainCamera.transform.position.x,
+                _previewObject.transform.position.y,
+                Controller.MainCamera.transform.position.z
+            );
+            Vector3 lookDirection = cameraPosXZ - _previewObject.transform.position;
+            if (lookDirection != Vector3.zero)
+            {
+                _previewObject.transform.rotation = Quaternion.LookRotation(-lookDirection, Vector3.up);
+            }
+        }
+    }
+
+    private void FinalizePlacement(Vector2 touchPos)
+    {
+        List<ARRaycastHit> hitResults = new List<ARRaycastHit>();
+        if (Controller.RaycastManager.Raycast(touchPos, hitResults, TrackableType.PlaneWithinPolygon))
+        {
+            var hitPose = hitResults[0].pose;
+            ARPlane plane = Controller.PlaneManager.GetPlane(hitResults[0].trackableId);
+            
+            if (plane != null)
+            {
+                // Create the actual anchor
+                _anchor = Controller.AnchorManager.AttachAnchor(plane, hitPose);
+                
+                if (_anchor != null)
+                {
+                    // Move preview object to anchor
+                    _previewObject.transform.SetParent(_anchor.transform, true);
+                    
+                    // Attach map quality indicator
+                    var indicatorGO = Instantiate(MapQualityIndicatorPrefab, _anchor.transform);
+                    _qualityIndicator = indicatorGO.GetComponent<MapQualityIndicator>();
+                    _qualityIndicator.DrawIndicator(plane.alignment, Controller.MainCamera);
+
+                    InstructionText.text = "To save this location, walk around the object to capture it from different angles";
+                    DebugText.text = "Waiting for sufficient mapping quality...";
+
+                    // Hide plane generator
+                    UpdatePlaneVisibility(false);
+                }
+            }
+        }
+        
+        // Clean up preview object if anchor creation failed
+        if (_anchor == null)
+        {
+            Destroy(_previewObject);
+        }
+        _previewObject = null;
+    }
+
         /// <summary>
 /// Resolve all cloud anchors in the ResolvingSet when a button is pressed.
                 /// </summary>

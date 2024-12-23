@@ -6772,7 +6772,7 @@ MonoBehaviour:
   GeospatialAnchorToggle: {fileID: 0}
   TerrainAnchorToggle: {fileID: 0}
   RooftopAnchorToggle: {fileID: 0}
-  InfoPanel: {fileID: 1592205121}
+  InfoPanel: {fileID: 0}
   InfoText: {fileID: 0}
   SnackBarText: {fileID: 0}
   DebugText: {fileID: 0}
