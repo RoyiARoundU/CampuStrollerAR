@@ -30,9 +30,12 @@ EditorBuildSettings:
     path: Assets/Samples/ARCore Extensions/1.46.0/Persistent Cloud Anchor Sample/Scenes/PersistentCloudAnchorsArf4
       1.unity
     guid: 7679c6ff5b8f04be49f87e2c1f6ed193
-  - enabled: 1
+  - enabled: 0
     path: Assets/Scenes/OpenStudioSubmission.unity
     guid: 2775243babeb347e099f7c38f633b2a5
+  - enabled: 1
+    path: Assets/Scenes/HistoryAR.unity
+    guid: d1774e22a3811401ba44d0ae7f676411
   m_configObjects:
     UnityEditor.XR.ARCore.ARCoreSettings: {fileID: 11400000, guid: 207f3da1039684020b274f2922e8f158, type: 2}
     UnityEditor.XR.ARKit.ARKitSettings: {fileID: 11400000, guid: 77ea0187b0e544a47a620b8583ea6b47, type: 2}

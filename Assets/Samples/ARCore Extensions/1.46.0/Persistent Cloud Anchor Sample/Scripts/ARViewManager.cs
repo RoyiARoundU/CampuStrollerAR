@@ -56,7 +56,11 @@ namespace Google.XR.ARCoreExtensions.Samples.PersistentCloudAnchors
         public GameObject ThinkingCloudAnchorPrefab;
         
 
+        // Tracks if we are currently dragging (finger is down).
+        private bool _isDragging = false;
 
+        // A temporary preview object that follows the finger as it moves.
+        private GameObject _previewObject = null;
 
         /// <summary>
         /// The game object that includes <see cref="MapQualityIndicator"/> to visualize

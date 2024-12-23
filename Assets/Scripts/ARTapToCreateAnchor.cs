@@ -48,14 +48,17 @@ public class ARTapToCreateAnchor : MonoBehaviour
     {
         if (Input.touchCount == 1)
         {
-            Vector2 touchPosition = Input.GetTouch(0).position;
-
-            if (arRaycastManager.Raycast(touchPosition, hits, TrackableType.PlaneWithinPolygon))
+            if (Input.touches[0].phase == TouchPhase.Ended)
             {
-                if (hits.Count > 0 && spawnedObject == null)  // Only create once
+                Vector2 touchPosition = Input.GetTouch(0).position;
+
+                if (arRaycastManager.Raycast(touchPosition, hits, TrackableType.PlaneWithinPolygon))
                 {
-                    var hitPose = hits[0].pose;
-                    CreateObjectAndAnchor(hitPose);
+                    if (hits.Count > 0 && spawnedObject == null) // Only create once
+                    {
+                        var hitPose = hits[0].pose;
+                        CreateObjectAndAnchor(hitPose);
+                    }
                 }
             }
         }
