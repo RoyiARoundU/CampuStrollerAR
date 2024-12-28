@@ -58,9 +58,14 @@ namespace Google.XR.ARCoreExtensions.Samples.PersistentCloudAnchors
 
         // Tracks if we are currently dragging (finger is down).
         private bool _isDragging = false;
+        private bool _isRotating = false;
 
         // A temporary preview object that follows the finger as it moves.
         private GameObject _previewObject = null;
+        private float _initialRotationAngle;
+        private float _currentRotationAngle;
+        private const float MIN_PINCH_DISTANCE = 50f;
+
 
         /// <summary>
         /// The game object that includes <see cref="MapQualityIndicator"/> to visualize
@@ -102,6 +107,7 @@ namespace Google.XR.ARCoreExtensions.Samples.PersistentCloudAnchors
         /// The debug text in bottom snack bar.
         /// </summary>
         public Text DebugText;
+        
 
         /// <summary>
         /// The button to save the typed name.
@@ -358,6 +364,8 @@ namespace Google.XR.ARCoreExtensions.Samples.PersistentCloudAnchors
         /// </summary>
         public void OnDisable()
         {
+            _isDragging = false;
+            _isRotating = false;
             if (_previewObject != null)
             {
                 Destroy(_previewObject);
@@ -411,6 +419,11 @@ namespace Google.XR.ARCoreExtensions.Samples.PersistentCloudAnchors
                     Destroy(result.Anchor.gameObject);
                 }
             }
+            if (_hostCoroutine != null)
+            {
+                StopCoroutine(_hostCoroutine);
+                _hostCoroutine = null;
+            }
 
             _resolveResults.Clear();
             UpdatePlaneVisibility(false);
@@ -419,83 +432,99 @@ namespace Google.XR.ARCoreExtensions.Samples.PersistentCloudAnchors
         /// <summary>
         /// The Unity Update() method.
         /// </summary>
-       public void Update()
-    {
-        // Give ARCore some time to prepare for hosting or resolving.
-        if (_timeSinceStart < _startPrepareTime)
+        public void Update()
         {
-            _timeSinceStart += Time.deltaTime;
+            // Give ARCore some time to prepare for hosting or resolving
+            if (_timeSinceStart < _startPrepareTime)
+            {
+                _timeSinceStart += Time.deltaTime;
+                if (_timeSinceStart >= _startPrepareTime)
+                {
+                    UpdateInitialInstruction();
+                }
+                return;
+            }
+
+            // Check AR Core lifecycle
+            ARCoreLifecycleUpdate();
+            if (_isReturning)
+            {
+                return;
+            }
+
             if (_timeSinceStart >= _startPrepareTime)
             {
-                UpdateInitialInstruction();
+                DisplayTrackingHelperMessage();
             }
+
+            // Handle different modes
+            if (Controller.Mode == PersistentCloudAnchorsController.ApplicationMode.Resolving)
+            {
+                ResolvingCloudAnchors();
+            }
+            else if (Controller.Mode == PersistentCloudAnchorsController.ApplicationMode.Hosting)
+            {
+                // Handle touch input based on number of fingers
+                if (Input.touchCount == 1)
+                {
+                    HandleSingleTouch(Input.GetTouch(0));
+                }
+                else if (Input.touchCount == 2)
+                {
+                    HandleDoubleTouch(Input.GetTouch(0), Input.GetTouch(1));
+                }
+                else if (Input.touchCount == 0)
+                {
+                    // Reset states when no touches are detected
+                    if (_isDragging || _isRotating)
+                    {
+                        FinalizePlacement();
+                    }
+                }
+
+                // Continue with cloud anchor hosting if anchor exists
+                if (_anchor != null)
+                {
+                    HostingCloudAnchor();
+                }
+            }
+        }
+ private void HandleSingleTouch(Touch touch)
+    {
+        // Ignore the touch if it's pointing on UI objects
+        if (EventSystem.current.IsPointerOverGameObject(touch.fingerId))
+        {
             return;
         }
 
-        ARCoreLifecycleUpdate();
-        if (_isReturning)
+        switch (touch.phase)
         {
-            return;
-        }
-
-        if (_timeSinceStart >= _startPrepareTime)
-        {
-            DisplayTrackingHelperMessage();
-        }
-
-        if (Controller.Mode == PersistentCloudAnchorsController.ApplicationMode.Resolving)
-        {
-            ResolvingCloudAnchors();
-        }
-        else if (Controller.Mode == PersistentCloudAnchorsController.ApplicationMode.Hosting)
-        {
-            // Handle touch input for dragging and placement
-            if (Input.touchCount > 0)
-            {
-                Touch touch = Input.GetTouch(0);
-
-                // Ignore the touch if it's pointing on UI objects
-                if (EventSystem.current.IsPointerOverGameObject(touch.fingerId))
+            case TouchPhase.Began:
+                // Start dragging if no anchor exists
+                if (_anchor == null && !_isDragging)
                 {
-                    return;
+                    _isDragging = true;
+                    HandleDragStart(touch.position);
                 }
+                break;
 
-                switch (touch.phase)
+            case TouchPhase.Moved:
+            case TouchPhase.Stationary:
+                // Update position while dragging
+                if (_isDragging && _previewObject != null)
                 {
-                    case TouchPhase.Began:
-                        // Start dragging if no anchor exists
-                        if (_anchor == null && !_isDragging)
-                        {
-                            _isDragging = true;
-                            // Create preview object
-                            HandleDragStart(touch.position);
-                        }
-                        break;
-
-                    case TouchPhase.Moved:
-                    case TouchPhase.Stationary:
-                        // Update position while dragging
-                        if (_isDragging && _previewObject != null)
-                        {
-                            UpdateDragPosition(touch.position);
-                        }
-                        break;
-
-                    case TouchPhase.Ended:
-                        // Finalize placement when drag ends
-                        if (_isDragging)
-                        {
-                            _isDragging = false;
-                            FinalizePlacement(touch.position);
-                        }
-                        break;
+                    UpdateDragPosition(touch.position);
                 }
-            }
+                break;
 
-            if (_anchor != null)
-            {
-                HostingCloudAnchor();
-            }
+            case TouchPhase.Ended:
+                // Finalize placement when drag ends
+                if (_isDragging)
+                {
+                    _isDragging = false;
+                    FinalizePlacement(touch.position);
+                }
+                break;
         }
     }
 
@@ -512,26 +541,149 @@ namespace Google.XR.ARCoreExtensions.Samples.PersistentCloudAnchors
 
     private void UpdateDragPosition(Vector2 touchPos)
     {
+        if (_isRotating) return; // Don't update position while rotating
+
         List<ARRaycastHit> hitResults = new List<ARRaycastHit>();
         if (Controller.RaycastManager.Raycast(touchPos, hitResults, TrackableType.PlaneWithinPolygon))
         {
             var hitPose = hitResults[0].pose;
             _previewObject.transform.position = hitPose.position;
             
-            // Update rotation to face camera while maintaining up vector
-            Vector3 cameraPosXZ = new Vector3(
-                Controller.MainCamera.transform.position.x,
-                _previewObject.transform.position.y,
-                Controller.MainCamera.transform.position.z
-            );
-            Vector3 lookDirection = cameraPosXZ - _previewObject.transform.position;
-            if (lookDirection != Vector3.zero)
+            // Only update rotation to face camera if we're not in the middle of a manual rotation
+            if (!_isRotating)
             {
-                _previewObject.transform.rotation = Quaternion.LookRotation(-lookDirection, Vector3.up);
+                Vector3 cameraPosXZ = new Vector3(
+                    Controller.MainCamera.transform.position.x,
+                    _previewObject.transform.position.y,
+                    Controller.MainCamera.transform.position.z
+                );
+                Vector3 lookDirection = cameraPosXZ - _previewObject.transform.position;
+                if (lookDirection != Vector3.zero)
+                {
+                    _previewObject.transform.rotation = Quaternion.LookRotation(-lookDirection, Vector3.up);
+                }
             }
         }
     }
 
+    private void HandleDoubleTouch(Touch touch0, Touch touch1)
+    {
+        // Only handle rotation if we have a preview object or anchor
+        GameObject targetObject = _previewObject != null ? _previewObject : 
+                                (_anchor != null ? _anchor.gameObject : null);
+        
+        if (targetObject == null) return;
+
+        switch (touch0.phase)
+        {
+            case TouchPhase.Began:
+                StartRotation(touch0, touch1, targetObject);
+                break;
+
+            case TouchPhase.Moved:
+                if (_isRotating)
+                {
+                    UpdateRotation(touch0, touch1, targetObject);
+                }
+                break;
+
+            case TouchPhase.Ended:
+                _isRotating = false;
+                break;
+        }
+    }
+    private Vector2 _previousTouchPosition;
+    private Vector3 _initialRotation;
+
+    private void StartRotation(Touch touch0, Touch touch1, GameObject targetObject)
+    {
+        // Calculate initial angle between two fingers
+        Vector2 initialVector = touch1.position - touch0.position;
+        
+        // Only start rotation if fingers are far enough apart
+        if (initialVector.magnitude >= MIN_PINCH_DISTANCE)
+        {
+            _isRotating = true;
+            _previousTouchPosition = (touch0.position + touch1.position) * 0.5f; // Center point
+            _initialRotation = targetObject.transform.eulerAngles;
+        }
+    }
+
+    private void UpdateRotation(Touch touch0, Touch touch1, GameObject targetObject)
+    {
+        Vector2 currentVector = touch1.position - touch0.position;
+        
+        // Only update rotation if fingers are far enough apart
+        if (currentVector.magnitude >= MIN_PINCH_DISTANCE)
+        {
+            Vector2 currentTouchPosition = (touch0.position + touch1.position) * 0.5f;
+        
+            // Calculate the difference in position from last frame
+            Vector2 deltaPosition = currentTouchPosition - _previousTouchPosition;
+        
+            // Calculate new rotation
+            Vector3 newRotation = targetObject.transform.eulerAngles;
+        
+            // Y-axis rotation (left/right) based on horizontal movement
+            newRotation.y += deltaPosition.x * 0.5f; // Adjust mult
+            float newXRotation = newRotation.x - deltaPosition.y * 0.5f;
+            if (newXRotation > 180f) newXRotation -= 360f;
+            newXRotation = Mathf.Clamp(newXRotation, -60f, 60f); // Limit rotation range
+            newRotation.x = newXRotation;
+            
+            targetObject.transform.eulerAngles = newRotation;
+
+            _previousTouchPosition = currentTouchPosition;
+        }
+    }
+
+    private void FinalizePlacement(Vector2? touchPos = null)
+    {
+        if (touchPos.HasValue && !_isRotating)
+        {
+            List<ARRaycastHit> hitResults = new List<ARRaycastHit>();
+            if (Controller.RaycastManager.Raycast(touchPos.Value, hitResults, TrackableType.PlaneWithinPolygon))
+            {
+                var hitPose = hitResults[0].pose;
+                ARPlane plane = Controller.PlaneManager.GetPlane(hitResults[0].trackableId);
+                
+                if (plane != null)
+                {
+                    // Create the actual anchor with the current rotation of the preview object
+                    hitPose.rotation = _previewObject.transform.rotation;
+                    _anchor = Controller.AnchorManager.AttachAnchor(plane, hitPose);
+                    
+                    if (_anchor != null)
+                    {
+                        // Move preview object to anchor
+                        _previewObject.transform.SetParent(_anchor.transform, true);
+                        
+                        // Attach map quality indicator
+                        var indicatorGO = Instantiate(MapQualityIndicatorPrefab, _anchor.transform);
+                        _qualityIndicator = indicatorGO.GetComponent<MapQualityIndicator>();
+                        _qualityIndicator.DrawIndicator(plane.alignment, Controller.MainCamera);
+
+                        InstructionText.text = "To save this location, walk around the object to capture it from different angles";
+                        DebugText.text = "Waiting for sufficient mapping quality...";
+
+                        // Hide plane generator
+                        UpdatePlaneVisibility(false);
+                    }
+                }
+            }
+            
+            // Clean up preview object if anchor creation failed
+            if (_anchor == null)
+            {
+                Destroy(_previewObject);
+            }
+        }
+        
+        // Reset states
+        _isDragging = false;
+        _isRotating = false;
+        _previewObject = null;
+    }
     private void FinalizePlacement(Vector2 touchPos)
     {
         List<ARRaycastHit> hitResults = new List<ARRaycastHit>();
