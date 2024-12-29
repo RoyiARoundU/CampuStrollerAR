@@ -464,7 +464,7 @@ namespace Google.XR.ARCoreExtensions.Samples.PersistentCloudAnchors
             }
             else if (Controller.Mode == PersistentCloudAnchorsController.ApplicationMode.Hosting)
             {
-                // Handle touch input based on number of fingers
+                // Handle different touch inputs based on number of fingers
                 if (Input.touchCount == 1)
                 {
                     HandleSingleTouch(Input.GetTouch(0));
@@ -472,6 +472,10 @@ namespace Google.XR.ARCoreExtensions.Samples.PersistentCloudAnchors
                 else if (Input.touchCount == 2)
                 {
                     HandleDoubleTouch(Input.GetTouch(0), Input.GetTouch(1));
+                }
+                else if (Input.touchCount == 3)
+                {
+                    HandleTripleTouch(Input.GetTouch(0), Input.GetTouch(1), Input.GetTouch(2));
                 }
                 else if (Input.touchCount == 0)
                 {
@@ -487,6 +491,11 @@ namespace Google.XR.ARCoreExtensions.Samples.PersistentCloudAnchors
                 {
                     HostingCloudAnchor();
                 }
+            }
+
+            if (_anchor != null)
+            {
+                UpdateAnchorPosition();
             }
         }
  private void HandleSingleTouch(Touch touch)
@@ -539,190 +548,157 @@ namespace Google.XR.ARCoreExtensions.Samples.PersistentCloudAnchors
         }
     }
 
-    private void UpdateDragPosition(Vector2 touchPos)
-    {
-        if (_isRotating) return; // Don't update position while rotating
+   private void UpdateDragPosition(Vector2 touchPos)
+{
+    if (_isRotating || _previewObject == null) return;
 
-        List<ARRaycastHit> hitResults = new List<ARRaycastHit>();
-        if (Controller.RaycastManager.Raycast(touchPos, hitResults, TrackableType.PlaneWithinPolygon))
+    List<ARRaycastHit> hitResults = new List<ARRaycastHit>();
+    if (Controller.RaycastManager.Raycast(touchPos, hitResults, TrackableType.PlaneWithinPolygon))
+    {
+        var hitPose = hitResults[0].pose;
+        _previewObject.transform.position = hitPose.position;
+        
+        // Only update rotation to face camera if we're not in the middle of a manual rotation
+        if (!_isRotating)
         {
-            var hitPose = hitResults[0].pose;
-            _previewObject.transform.position = hitPose.position;
-            
-            // Only update rotation to face camera if we're not in the middle of a manual rotation
-            if (!_isRotating)
+            Vector3 cameraPosXZ = new Vector3(
+                Controller.MainCamera.transform.position.x,
+                _previewObject.transform.position.y,
+                Controller.MainCamera.transform.position.z
+            );
+            Vector3 lookDirection = cameraPosXZ - _previewObject.transform.position;
+            if (lookDirection != Vector3.zero)
             {
-                Vector3 cameraPosXZ = new Vector3(
-                    Controller.MainCamera.transform.position.x,
-                    _previewObject.transform.position.y,
-                    Controller.MainCamera.transform.position.z
-                );
-                Vector3 lookDirection = cameraPosXZ - _previewObject.transform.position;
-                if (lookDirection != Vector3.zero)
-                {
-                    _previewObject.transform.rotation = Quaternion.LookRotation(-lookDirection, Vector3.up);
-                }
+                _previewObject.transform.rotation = Quaternion.LookRotation(-lookDirection, Vector3.up);
             }
         }
     }
+}
 
-    private void HandleDoubleTouch(Touch touch0, Touch touch1)
+   private void HandleDoubleTouch(Touch touch0, Touch touch1)
+{
+    GameObject targetObject = GetTargetObject();
+    if (targetObject == null) return;
+
+    // Calculate current and previous positions
+    Vector2 currentTouch0 = touch0.position;
+    Vector2 currentTouch1 = touch1.position;
+    Vector2 previousTouch0 = touch0.position - touch0.deltaPosition;
+    Vector2 previousTouch1 = touch1.position - touch1.deltaPosition;
+
+    // Calculate distances
+    float currentDistance = Vector2.Distance(currentTouch0, currentTouch1);
+    float previousDistance = Vector2.Distance(previousTouch0, previousTouch1);
+
+    switch (touch0.phase)
     {
-        // Only handle rotation if we have a preview object or anchor
-        GameObject targetObject = _previewObject != null ? _previewObject : 
-                                (_anchor != null ? _anchor.gameObject : null);
-        
+        case TouchPhase.Began:
+            _isRotating = true;
+            _initialTouchDistance = currentDistance;
+            _initialScale = targetObject.transform.localScale.x;
+            _initialRotationAngle = targetObject.transform.eulerAngles.x;
+            break;
+
+        case TouchPhase.Moved:
+            // Handle scaling
+            float scaleDelta = (currentDistance - previousDistance) * SCALE_SPEED;
+            float newScale = targetObject.transform.localScale.x + scaleDelta;
+            newScale = Mathf.Clamp(newScale, MIN_SCALE, MAX_SCALE);
+            targetObject.transform.localScale = Vector3.one * newScale;
+
+            // Handle tilt rotation based on average vertical movement
+            float avgVerticalMovement = (touch0.deltaPosition.y + touch1.deltaPosition.y) / 2f;
+            if (Mathf.Abs(avgVerticalMovement) > 0.1f)
+            {
+                Vector3 currentRotation = targetObject.transform.eulerAngles;
+                float newXRotation = currentRotation.x + (avgVerticalMovement * TILT_SPEED);
+                
+                // Clamp rotation
+                if (newXRotation > 180f) newXRotation -= 360f;
+                newXRotation = Mathf.Clamp(newXRotation, -MAX_TILT_ANGLE, MAX_TILT_ANGLE);
+                
+                currentRotation.x = newXRotation;
+                targetObject.transform.eulerAngles = currentRotation;
+            }
+            break;
+
+        case TouchPhase.Ended:
+            _isRotating = false;
+            break;
+    }
+}
+
+    private GameObject GetTargetObject()
+    {
+        return _previewObject != null ? _previewObject : 
+            (_anchor != null ? _anchor.gameObject : null);
+    }
+
+    private void HandleTripleTouch(Touch touch0, Touch touch1, Touch touch2)
+    {
+        GameObject targetObject = GetTargetObject();
         if (targetObject == null) return;
 
-        switch (touch0.phase)
-        {
-            case TouchPhase.Began:
-                StartRotation(touch0, touch1, targetObject);
-                break;
-
-            case TouchPhase.Moved:
-                if (_isRotating)
-                {
-                    UpdateRotation(touch0, touch1, targetObject);
-                }
-                break;
-
-            case TouchPhase.Ended:
-                _isRotating = false;
-                break;
-        }
-    }
-    private Vector2 _previousTouchPosition;
-    private Vector3 _initialRotation;
-
-    private void StartRotation(Touch touch0, Touch touch1, GameObject targetObject)
-    {
-        // Calculate initial angle between two fingers
-        Vector2 initialVector = touch1.position - touch0.position;
+        // Calculate average vertical movement of all three touches
+        float avgDeltaY = (touch0.deltaPosition.y + touch1.deltaPosition.y + touch2.deltaPosition.y) / 3f;
         
-        // Only start rotation if fingers are far enough apart
-        if (initialVector.magnitude >= MIN_PINCH_DISTANCE)
-        {
-            _isRotating = true;
-            _previousTouchPosition = (touch0.position + touch1.position) * 0.5f; // Center point
-            _initialRotation = targetObject.transform.eulerAngles;
-        }
-    }
-
-    private void UpdateRotation(Touch touch0, Touch touch1, GameObject targetObject)
-    {
-        Vector2 currentVector = touch1.position - touch0.position;
-        
-        // Only update rotation if fingers are far enough apart
-        if (currentVector.magnitude >= MIN_PINCH_DISTANCE)
-        {
-            Vector2 currentTouchPosition = (touch0.position + touch1.position) * 0.5f;
-        
-            // Calculate the difference in position from last frame
-            Vector2 deltaPosition = currentTouchPosition - _previousTouchPosition;
-        
-            // Calculate new rotation
-            Vector3 newRotation = targetObject.transform.eulerAngles;
-        
-            // Y-axis rotation (left/right) based on horizontal movement
-            newRotation.y += deltaPosition.x * 0.5f; // Adjust mult
-            float newXRotation = newRotation.x - deltaPosition.y * 0.5f;
-            if (newXRotation > 180f) newXRotation -= 360f;
-            newXRotation = Mathf.Clamp(newXRotation, -60f, 60f); // Limit rotation range
-            newRotation.x = newXRotation;
-            
-            targetObject.transform.eulerAngles = newRotation;
-
-            _previousTouchPosition = currentTouchPosition;
-        }
-    }
-
-    private void FinalizePlacement(Vector2? touchPos = null)
-    {
-        if (touchPos.HasValue && !_isRotating)
-        {
-            List<ARRaycastHit> hitResults = new List<ARRaycastHit>();
-            if (Controller.RaycastManager.Raycast(touchPos.Value, hitResults, TrackableType.PlaneWithinPolygon))
-            {
-                var hitPose = hitResults[0].pose;
-                ARPlane plane = Controller.PlaneManager.GetPlane(hitResults[0].trackableId);
-                
-                if (plane != null)
-                {
-                    // Create the actual anchor with the current rotation of the preview object
-                    hitPose.rotation = _previewObject.transform.rotation;
-                    _anchor = Controller.AnchorManager.AttachAnchor(plane, hitPose);
-                    
-                    if (_anchor != null)
-                    {
-                        // Move preview object to anchor
-                        _previewObject.transform.SetParent(_anchor.transform, true);
-                        
-                        // Attach map quality indicator
-                        var indicatorGO = Instantiate(MapQualityIndicatorPrefab, _anchor.transform);
-                        _qualityIndicator = indicatorGO.GetComponent<MapQualityIndicator>();
-                        _qualityIndicator.DrawIndicator(plane.alignment, Controller.MainCamera);
-
-                        InstructionText.text = "To save this location, walk around the object to capture it from different angles";
-                        DebugText.text = "Waiting for sufficient mapping quality...";
-
-                        // Hide plane generator
-                        UpdatePlaneVisibility(false);
-                    }
-                }
-            }
-            
-            // Clean up preview object if anchor creation failed
-            if (_anchor == null)
-            {
-                Destroy(_previewObject);
-            }
-        }
-        
-        // Reset states
-        _isDragging = false;
-        _isRotating = false;
-        _previewObject = null;
-    }
-    private void FinalizePlacement(Vector2 touchPos)
+        // Apply height adjustment
+        Vector3 newPosition = targetObject.transform.position;
+        newPosition.y += avgDeltaY * HEIGHT_ADJUSTMENT_SPEED;
+        targetObject.transform.position = newPosition;
+    }   
+   void FinalizePlacement(Vector2? touchPos = null)
+{
+    if (_previewObject != null && touchPos.HasValue)
     {
         List<ARRaycastHit> hitResults = new List<ARRaycastHit>();
-        if (Controller.RaycastManager.Raycast(touchPos, hitResults, TrackableType.PlaneWithinPolygon))
+        if (Controller.RaycastManager.Raycast(touchPos.Value, hitResults, TrackableType.PlaneWithinPolygon))
         {
             var hitPose = hitResults[0].pose;
             ARPlane plane = Controller.PlaneManager.GetPlane(hitResults[0].trackableId);
             
             if (plane != null)
             {
-                // Create the actual anchor
+                // Preserve current transform values
+                Vector3 currentPosition = _previewObject.transform.position;
+                Quaternion currentRotation = _previewObject.transform.rotation;
+                Vector3 currentScale = _previewObject.transform.localScale;
+
+                // Create anchor
+                hitPose.position = currentPosition;
+                hitPose.rotation = currentRotation;
                 _anchor = Controller.AnchorManager.AttachAnchor(plane, hitPose);
                 
                 if (_anchor != null)
                 {
-                    // Move preview object to anchor
-                    _previewObject.transform.SetParent(_anchor.transform, true);
+                    // Parent preview object to anchor while maintaining transform
+                    _previewObject.transform.SetParent(_anchor.transform, false);
+                    _previewObject.transform.position = currentPosition;
+                    _previewObject.transform.rotation = currentRotation;
+                    _previewObject.transform.localScale = currentScale;
                     
-                    // Attach map quality indicator
+                    // Setup quality indicator
                     var indicatorGO = Instantiate(MapQualityIndicatorPrefab, _anchor.transform);
                     _qualityIndicator = indicatorGO.GetComponent<MapQualityIndicator>();
                     _qualityIndicator.DrawIndicator(plane.alignment, Controller.MainCamera);
 
+                    // Update UI
                     InstructionText.text = "To save this location, walk around the object to capture it from different angles";
                     DebugText.text = "Waiting for sufficient mapping quality...";
 
-                    // Hide plane generator
+                    // Start hosting process
                     UpdatePlaneVisibility(false);
+                    HostingCloudAnchor();
                 }
             }
         }
-        
-        // Clean up preview object if anchor creation failed
-        if (_anchor == null)
-        {
-            Destroy(_previewObject);
-        }
-        _previewObject = null;
     }
+    
+    // Reset states
+    _isDragging = false;
+    _isRotating = false;
+    _previewObject = null;
+}
 
         /// <summary>
 /// Resolve all cloud anchors in the ResolvingSet when a button is pressed.
@@ -782,77 +758,43 @@ namespace Google.XR.ARCoreExtensions.Samples.PersistentCloudAnchors
 
         private void HostingCloudAnchor()
         {
-            // There is no anchor for hosting.
-            if (_anchor == null)
-            {
-                return;
-            }
+    // There is no anchor for hosting
+         if (_anchor == null)
+         {
+             return;
+          }
 
-            // There is a pending or finished hosting task.
-            if (_hostPromise != null || _hostResult != null)
-            {
-                return;
-            }
+    // There is a pending or finished hosting task
+    if (_hostPromise != null || _hostResult != null)
+    {
+        return;
+    }
 
-            // Update map quality:
-            int qualityState = 2;
-            // Can pass in ANY valid camera pose to the mapping quality API.
-            // Ideally, the pose should represent users’ expected perspectives.
-            FeatureMapQuality quality =
-                Controller.AnchorManager.EstimateFeatureMapQualityForHosting(GetCameraPose());
-            DebugText.text = "Current mapping quality: " + quality;
-            qualityState = (int)quality;
-            _qualityIndicator.UpdateQualityState(qualityState);
+    // Update map quality
+    FeatureMapQuality quality = Controller.AnchorManager.EstimateFeatureMapQualityForHosting(GetCameraPose());
+    DebugText.text = "Current mapping quality: " + quality;
+    _qualityIndicator?.UpdateQualityState((int)quality);
 
-            // Hosting instructions:
-            var cameraDist = (_qualityIndicator.transform.position -
-                Controller.MainCamera.transform.position).magnitude;
-            if (cameraDist < _qualityIndicator.Radius * 1.5f)
-            {
-                InstructionText.text = "You are too close, move backward.";
-                return;
-            }
-            else if (cameraDist > 10.0f)
-            {
-                InstructionText.text = "You are too far, come closer.";
-                return;
-            }
-            else if (_qualityIndicator.ReachTopviewAngle)
-            {
-                InstructionText.text =
-                    "You are looking from the top view, move around from all sides.";
-                return;
-            }
-            else if (!_qualityIndicator.ReachQualityThreshold)
-            {
-                InstructionText.text = "Save the object here by capturing it from all sides.";
-                return;
-            }
+    // Check quality threshold and start hosting if met
+    if (quality == FeatureMapQuality.Good)
+    {
+        InstructionText.text = "Processing...";
+        DebugText.text = "Mapping quality has reached sufficient threshold, creating Cloud Anchor.";
 
-            // Start hosting:
-            InstructionText.text = "Processing...";
-            DebugText.text = "Mapping quality has reached sufficient threshold, " +
-                "creating Cloud Anchor.";
-            DebugText.text = string.Format(
-                "FeatureMapQuality has reached {0}, triggering CreateCloudAnchor.",
-                Controller.AnchorManager.EstimateFeatureMapQualityForHosting(GetCameraPose()));
-
-            // Creating a Cloud Anchor with lifetime = 1 day.
-            // This is configurable up to 365 days when keyless authentication is used.
-            var promise = Controller.AnchorManager.HostCloudAnchorAsync(_anchor, 1);
-            if (promise.State == PromiseState.Done)
-            {
-                Debug.LogFormat("Failed to host a Cloud Anchor.");
-                OnAnchorHostedFinished(false);
-            }
-            else
-            {
-                _hostPromise = promise;
-                _hostCoroutine = HostAnchor();
-                StartCoroutine(_hostCoroutine);
-            }
+        var promise = Controller.AnchorManager.HostCloudAnchorAsync(_anchor, 1);
+        if (promise.State == PromiseState.Done)
+        {
+            Debug.LogFormat("Failed to host a Cloud Anchor.");
+            OnAnchorHostedFinished(false);
         }
-
+        else
+        {
+            _hostPromise = promise;
+            _hostCoroutine = HostAnchor();
+            StartCoroutine(_hostCoroutine);
+        }
+    }
+}
         private IEnumerator HostAnchor()
         {
             yield return _hostPromise;
@@ -1171,6 +1113,47 @@ namespace Google.XR.ARCoreExtensions.Samples.PersistentCloudAnchors
         {
             SaveButton.enabled = active;
             SaveButton.GetComponentInChildren<Text>().color = active ? _activeColor : Color.gray;
+        }
+
+        private const float SCALE_SPEED = 0.01f;
+        private const float MIN_SCALE = 0.3f;
+        private const float MAX_SCALE = 3.0f;
+        private const float HEIGHT_ADJUSTMENT_SPEED = 0.005f;
+        private const float TILT_SPEED = 0.5f;
+        private const float MAX_TILT_ANGLE = 60f;
+
+        private float _initialTouchDistance;
+        private float _initialScale;
+
+        private float GetPlaneHeight(Vector3 position)
+        {
+            List<ARRaycastHit> hitResults = new List<ARRaycastHit>();
+            Ray ray = new Ray(position + Vector3.up * 10f, Vector3.down);
+            if (Controller.RaycastManager.Raycast(ray, hitResults, TrackableType.Planes))
+            {
+                return hitResults[0].pose.position.y;
+            }
+            return 0f;
+        }
+
+        private void UpdateAnchorPosition()
+        {
+            if (_anchor != null)
+            {
+                Vector3 desiredPosition = _anchor.transform.position;
+                float planeHeight = GetPlaneHeight(desiredPosition);
+                desiredPosition.y = Mathf.Max(planeHeight, desiredPosition.y);
+                
+                // Update the transform while maintaining the offset
+                if (_previewObject != null)
+                {
+                    _previewObject.transform.position = desiredPosition;
+                }
+                else
+                {
+                    _anchor.transform.GetChild(0).position = desiredPosition;
+                }
+            }
         }
     }
 }
