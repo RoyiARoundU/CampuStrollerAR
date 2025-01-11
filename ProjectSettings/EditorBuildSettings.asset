@@ -33,9 +33,12 @@ EditorBuildSettings:
   - enabled: 0
     path: Assets/Scenes/OpenStudioSubmission.unity
     guid: 2775243babeb347e099f7c38f633b2a5
-  - enabled: 1
+  - enabled: 0
     path: Assets/Scenes/HistoryAR.unity
     guid: d1774e22a3811401ba44d0ae7f676411
+  - enabled: 1
+    path: Assets/Scenes/TigerScene.unity
+    guid: 402d1572677204bd7a1c01c9eb6cfc7f
   m_configObjects:
     UnityEditor.XR.ARCore.ARCoreSettings: {fileID: 11400000, guid: 207f3da1039684020b274f2922e8f158, type: 2}
     UnityEditor.XR.ARKit.ARKitSettings: {fileID: 11400000, guid: 77ea0187b0e544a47a620b8583ea6b47, type: 2}

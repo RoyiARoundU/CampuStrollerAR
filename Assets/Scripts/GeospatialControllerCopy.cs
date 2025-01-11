@@ -51,7 +51,7 @@ namespace Google.XR.ARCoreExtensions.Samples.Geospatial
     /// </summary>
     [SuppressMessage("StyleCop.CSharp.ReadabilityRules", "SA1118:ParameterMustNotSpanMultipleLines",
         Justification = "Bypass source check.")]
-    public class GeospatialController : MonoBehaviour
+    public class GeospatialControllerCopy : MonoBehaviour
     {
         [Header("AR Components")]
 
@@ -318,7 +318,6 @@ namespace Google.XR.ARCoreExtensions.Samples.Geospatial
         private List<GameObject> _anchorObjects = new List<GameObject>();
         private IEnumerator _startLocationService = null;
         private IEnumerator _asyncCheck = null;
-        private Transform originalParent;
 
         /// <summary>
         /// Callback handling "Get Started" button click event in Privacy Prompt.
@@ -714,26 +713,12 @@ namespace Google.XR.ARCoreExtensions.Samples.Geospatial
                     _clearStreetscapeGeometryRenderObjects = false;
                 }
 
-                if (Input.touchCount > 0
+                if (Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began
                     && !EventSystem.current.IsPointerOverGameObject(Input.GetTouch(0).fingerId)
                     && _anchorObjects.Count < _storageLimit)
                 {
-                    Touch touch = Input.GetTouch(0);
-                    if (touch.phase == TouchPhase.Began)
-                    {
-                        // enter the mode to move the selected object
-                        EnterSelectedMode(touch.position);
-                    }
-                    else if (touch.phase == TouchPhase.Moved || touch.phase == TouchPhase.Stationary)
-                    {
-                        // Update marker position while the finger touches the screen
-                        // MoveWithCamera(touch.position);
-                    }
-                    else if (touch.phase == TouchPhase.Ended || touch.phase == TouchPhase.Canceled)
-                    {
-                        // Exit the selection and put the object in place
-                        ExitSelectedMode(touch.position);
-                    }
+                    // Set anchor on screen tap.
+                    PlaceAnchorByScreenTap(Input.GetTouch(0).position);
                 }
 
                 // Hide anchor settings and toggles if the storage limit has been reached.
@@ -773,46 +758,6 @@ namespace Google.XR.ARCoreExtensions.Samples.Geospatial
             else
             {
                 InfoText.text = "GEOSPATIAL POSE: not tracking";
-            }
-        }
-        
-        
-        private void EnterSelectedMode(Vector3 position)
-        {
-            // Cast a ray from the screen touch or from a specific position in world space
-            Ray ray = Camera.main.ScreenPointToRay(position); // Use position from your touch or desired location
-
-            // Perform the raycast to detect a hit with the virtual object
-            if (Physics.Raycast(ray, out var hitInfo))
-            {
-                // Check if the ray hits a virtual object
-                if (hitInfo.collider != null)
-                {
-                    originalParent = hitInfo.transform.parent;
-                    hitInfo.transform.SetParent(Camera.main.transform);
-                }
-            }
-        }
-
-        private void ExitSelectedMode(Vector3 position)
-        {
-            // Cast a ray from the screen touch or from a specific position in world space
-            Ray ray = Camera.main.ScreenPointToRay(position); // Use position from your touch or desired location
-
-            // Perform the raycast to detect a hit with the virtual object
-            if (Physics.Raycast(ray, out var hitInfo))
-            {
-                // Check if the ray hits a virtual object
-                if (hitInfo.collider != null)
-                {
-                    hitInfo.transform.SetParent(originalParent);
-                    string logInfo =
-                        $"object name: {hitInfo.transform.gameObject.name}, \n" +
-                        $"object local position after move: {hitInfo.transform.localPosition}, \n" +
-                        $"object local rotation after move: ({hitInfo.transform.localEulerAngles.x}, {hitInfo.transform.localEulerAngles.y}, {hitInfo.transform.localEulerAngles.z})";
-                    Debug.Log(logInfo);
-                    SnackBarText.text = logInfo;
-                }
             }
         }
 
