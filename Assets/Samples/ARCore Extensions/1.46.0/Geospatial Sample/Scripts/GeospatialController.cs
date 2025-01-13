@@ -319,6 +319,9 @@ namespace Google.XR.ARCoreExtensions.Samples.Geospatial
         private IEnumerator _startLocationService = null;
         private IEnumerator _asyncCheck = null;
         private Transform originalParent;
+        private GameObject selectedObject;
+
+        [SerializeField] private LayerMask selectableLayer;
 
         /// <summary>
         /// Callback handling "Get Started" button click event in Privacy Prompt.
@@ -456,6 +459,14 @@ namespace Google.XR.ARCoreExtensions.Samples.Geospatial
             {
                 Debug.LogError("Cannot find ARCoreExtensions.");
             }
+
+            // Ensure object has a collider
+            if (GetComponent<Collider>() == null)
+            {
+                gameObject.AddComponent<BoxCollider>();
+            }
+
+            gameObject.layer = LayerMask.NameToLayer("Selectable");
         }
 
         /// <summary>
@@ -777,42 +788,39 @@ namespace Google.XR.ARCoreExtensions.Samples.Geospatial
         }
         
         
-        private void EnterSelectedMode(Vector3 position)
+                private void EnterSelectedMode(Vector3 position)
         {
-            // Cast a ray from the screen touch or from a specific position in world space
-            Ray ray = Camera.main.ScreenPointToRay(position); // Use position from your touch or desired location
-
-            // Perform the raycast to detect a hit with the virtual object
-            if (Physics.Raycast(ray, out var hitInfo))
+            Ray ray = Camera.main.ScreenPointToRay(position);
+            RaycastHit hitInfo;
+            
+            // Debug the layer mask
+            Debug.Log($"Current layer mask: {selectableLayer.value}");
+            
+            // Check if a specific layer is in the mask
+            bool isLayerIncluded = (selectableLayer & (1 << LayerMask.NameToLayer("Selectable"))) != 0;
+            Debug.Log($"Is Selectable layer included: {isLayerIncluded}");
+            
+            // Raycast with layer mask
+            if (Physics.Raycast(ray, out hitInfo, Mathf.Infinity, selectableLayer))
             {
-                // Check if the ray hits a virtual object
-                if (hitInfo.collider != null)
-                {
-                    originalParent = hitInfo.transform.parent;
-                    hitInfo.transform.SetParent(Camera.main.transform);
-                }
+                Debug.Log($"Hit object on layer: {LayerMask.LayerToName(hitInfo.collider.gameObject.layer)}");
+                // ... rest of your selection code
             }
         }
 
         private void ExitSelectedMode(Vector3 position)
         {
-            // Cast a ray from the screen touch or from a specific position in world space
-            Ray ray = Camera.main.ScreenPointToRay(position); // Use position from your touch or desired location
-
-            // Perform the raycast to detect a hit with the virtual object
-            if (Physics.Raycast(ray, out var hitInfo))
+            // Only proceed if we have a selected object
+            if (selectedObject != null)
             {
-                // Check if the ray hits a virtual object
-                if (hitInfo.collider != null)
-                {
-                    hitInfo.transform.SetParent(originalParent);
-                    string logInfo =
-                        $"object name: {hitInfo.transform.gameObject.name}, \n" +
-                        $"object local position after move: {hitInfo.transform.localPosition}, \n" +
-                        $"object local rotation after move: ({hitInfo.transform.localEulerAngles.x}, {hitInfo.transform.localEulerAngles.y}, {hitInfo.transform.localEulerAngles.z})";
-                    Debug.Log(logInfo);
-                    SnackBarText.text = logInfo;
-                }
+                // Return the object to its original parent
+                selectedObject.transform.SetParent(originalParent, true);
+                
+                // Log the final position for debugging
+                Debug.Log($"Object placed at position: {selectedObject.transform.position}");
+                
+                // Clear the selection
+                selectedObject = null;
             }
         }
 
