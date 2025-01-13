@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public class disolveEdges : MonoBehaviour
+public class dissolveEdges : MonoBehaviour
 {
     [SerializeField] private float dissolveAmount = 0f;
     [SerializeField] private float edgeWidth = 0.1f;
