@@ -42,6 +42,9 @@ EditorBuildSettings:
   - enabled: 0
     path: Assets/Scenes/TigerScene From Home.unity
     guid: 9a7130e4c7a41494595c643165656732
+  - enabled: 1
+    path: Assets/Scenes/TigerScene 1.unity
+    guid: 7b8cbbcc1e1b640f98afd2b96cf25f0c
   m_configObjects:
     UnityEditor.XR.ARCore.ARCoreSettings: {fileID: 11400000, guid: 207f3da1039684020b274f2922e8f158, type: 2}
     UnityEditor.XR.ARKit.ARKitSettings: {fileID: 11400000, guid: 77ea0187b0e544a47a620b8583ea6b47, type: 2}
